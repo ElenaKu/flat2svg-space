@@ -6,3 +6,6 @@ vtracer
 potracer
 resvg-py
 spaces
+scikit-image
+scipy
+Pillow
