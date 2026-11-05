@@ -11,7 +11,9 @@ Flow:
   3. Flat images are converted at once; other images get an explanation and a
      "Convert anyway" button.
   4. The user rates the result (Excellent / Acceptable / Error).
-  5. With the user's consent, the source, the SVG, the detector report and the rating
+  5. Every event is logged anonymously to data/usage/<date>.jsonl (time, session id,
+     HF username if the visitor signed in, verdict, size, rating) - no images.
+  6. With the user's consent, the source, the SVG, the detector report and the rating
      are saved to a private dataset (LOG_REPO) for quality analysis.
 
 Space secrets / variables:
@@ -84,6 +86,24 @@ def save_record(run_id, src_path, svg_text, report, extra):
         meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
+def user_info(request, profile):
+    """Anonymous browser session id plus the Hugging Face username if the visitor signed in."""
+    return {"session": getattr(request, "session_hash", None) if request else None,
+            "user": profile.username if profile else None}
+
+
+def log_usage(event, who, **fields):
+    """Anonymous usage line for every event, saved even without consent (no image, no SVG)."""
+    now = datetime.now(timezone.utc)
+    line = {"time": now.isoformat(), "event": event, **who, **fields}
+    lock = scheduler.lock if scheduler else _NoLock()
+    with lock:
+        folder = LOG_DIR / "usage"
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / f"{now.strftime('%Y-%m-%d')}.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(line) + "\n")
+
+
 class _NoLock:
     def __enter__(self):
         return self
@@ -130,35 +150,43 @@ VERDICT_TEXT = {
 }
 
 
-def on_upload(path, consent):
+def on_upload(path, consent, request: gr.Request, profile: gr.OAuthProfile | None):
     """Run the detector; convert at once only if the image is flat."""
     check_upload(path)
     run_id = uuid.uuid4().hex[:12]
+    who = user_info(request, profile)
     rep = detect(path)
     report = rep.__dict__ if hasattr(rep, "__dict__") else dict(rep)
     msg = f"**{VERDICT_TEXT.get(rep.verdict, rep.verdict)}**\n\n<small>{rep.reason}</small>"
     if rep.verdict != "flat":
         if consent:
-            save_record(run_id, path, None, report, {"converted": False})
+            save_record(run_id, path, None, report, {"converted": False, **who})
+        log_usage("upload", who, run_id=run_id, verdict=rep.verdict, width=rep.width, height=rep.height,
+                  converted=False, consent=bool(consent))
         return (msg, None, None, "", gr.update(visible=True), gr.update(visible=False), run_id, report)
     svg, svg_file, info = convert(path)
     if consent:
-        save_record(run_id, path, svg, report, {"converted": True, "forced": False, "info": info})
+        save_record(run_id, path, svg, report, {"converted": True, "forced": False, "info": info, **who})
+    log_usage("upload", who, run_id=run_id, verdict=rep.verdict, width=rep.width, height=rep.height,
+              converted=True, info=info, consent=bool(consent))
     return (msg, svg_html(svg), svg_file, info, gr.update(visible=False), gr.update(visible=True), run_id, report)
 
 
-def on_force(path, consent, run_id, report):
+def on_force(path, consent, run_id, report, request: gr.Request, profile: gr.OAuthProfile | None):
+    who = user_info(request, profile)
     svg, svg_file, info = convert(path)
     if consent:
-        save_record(run_id, path, svg, report, {"converted": True, "forced": True, "info": info})
+        save_record(run_id, path, svg, report, {"converted": True, "forced": True, "info": info, **who})
+    log_usage("force", who, run_id=run_id, verdict=report.get("verdict"), info=info, consent=bool(consent))
     return svg_html(svg), svg_file, info, gr.update(visible=False), gr.update(visible=True)
 
 
-def on_rate(rating, comment, consent, run_id, report):
+def on_rate(rating, comment, consent, run_id, report, who):
     if not run_id:
         return "Nothing to rate yet."
+    log_usage("rate", who, run_id=run_id, rating=rating, verdict=report.get("verdict"), consent=bool(consent))
     if consent:
-        save_record(run_id, None, None, report, {"rating": rating, "comment": comment})
+        save_record(run_id, None, None, report, {"rating": rating, "comment": comment, **who})
         return f"Thank you! Your rating: {rating}."
     return "Thank you! (Ratings are only saved when the checkbox above is on.)"
 
@@ -173,6 +201,8 @@ def svg_html(svg):
 with gr.Blocks(title="flat2svg - flat PNG to SVG") as demo:
     gr.Markdown("# flat2svg\nFree vectorizer for **flat illustrations**: even color fills, sharp edges, "
                 "no gradients. Upload a PNG or JPG and download the SVG.")
+    with gr.Row():
+        gr.LoginButton(value="Sign in with Hugging Face (optional)")
     consent = gr.Checkbox(value=True, label="Allow saving my image, the SVG and my rating to help improve "
                                             "the tool (stored privately, never shared or sold)")
     run_id = gr.State("")
@@ -199,9 +229,13 @@ with gr.Blocks(title="flat2svg - flat PNG to SVG") as demo:
 
     go.click(on_upload, [src, consent], [verdict, preview, svg_file, info, force, rate_box, run_id, report])
     force.click(on_force, [src, consent, run_id, report], [preview, svg_file, info, force, rate_box])
+    def make_rate(label):
+        def rate(c, cs, r, rp, request: gr.Request, profile: gr.OAuthProfile | None):
+            return on_rate(label, c, cs, r, rp, user_info(request, profile))
+        return rate
+
     for btn, label in ((b_ok, "Excellent"), (b_mid, "Acceptable"), (b_err, "Error")):
-        btn.click(lambda c, cs, r, rp, lab=label: on_rate(lab, c, cs, r, rp),
-                  [comment, consent, run_id, report], thanks)
+        btn.click(make_rate(label), [comment, consent, run_id, report], thanks)
 
 demo.queue(default_concurrency_limit=1, max_size=20)
 
