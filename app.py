@@ -30,11 +30,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import gradio as gr
+import spaces
 from huggingface_hub import CommitScheduler, snapshot_download
 
 HF_TOKEN = os.environ.get("HF_TOKEN")
-CORE_REPO = os.environ.get("CORE_REPO", "ElenaKu/flat2svg-core")
-LOG_REPO = os.environ.get("LOG_REPO", "ElenaKu/flat2svg-feedback")
+CORE_REPO = os.environ.get("CORE_REPO", "Ellenanet/flat2svg-core")
+LOG_REPO = os.environ.get("LOG_REPO", "Ellenanet/flat2svg-feedback")
 MAX_MB = 10
 MAX_SIDE = 4000
 
@@ -47,6 +48,13 @@ import flat2svg as f2s  # noqa: E402
 import flatness_detector as fd  # noqa: E402
 
 OPTIONS = {**f2s.DEFAULTS, "jobs": 1}
+
+
+@spaces.GPU(duration=1)
+def _zerogpu_placeholder():
+    """ZeroGPU hardware refuses to start without a @spaces.GPU function.
+    flat2svg runs on CPU only, so this function exists just to satisfy that check and is never called."""
+    return None
 
 # ---------------------------------------------------------------------------
 # Logging to a private dataset (pushed in the background every few minutes)
