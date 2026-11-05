@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>flat2svg - flat illustrations to clean SVG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#14130f;--card:#1d1c17;--line:#34322b;--text:#f2efe8;--muted:#b5b0a3;--gold:#e6b85c;--ink:#14130f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,label:focus-within{outline:2px solid var(--gold);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px 56px}
+header{display:flex;align-items:center;gap:12px;padding:28px 0}
+.logo{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;letter-spacing:-.01em}
+h1{margin:12px 0 10px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:48px;line-height:1.06;letter-spacing:-.02em}
+.sub{margin:0 0 28px;max-width:580px;font-size:18px;line-height:1.5;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px;margin-bottom:20px}
+.drop{border:2px dashed #5a5546;border-radius:14px;padding:34px 16px;text-align:center;background:#17160f}
+.drop.over{border-color:var(--gold);background:#201d12}
+.drop p{margin:0 0 14px;font-size:16px;font-weight:600}
+.btn{background:var(--gold);color:var(--ink);border:0;border-radius:12px;padding:13px 22px;font-size:16px;font-weight:600;min-height:48px}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid #4a463b;font-weight:500}
+.btn[disabled]{opacity:.5;cursor:default}
+.note{font-size:13px;color:#a29d90;margin:12px 0 0}
+.consent{display:flex;gap:10px;align-items:flex-start;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);font-size:14px;line-height:1.5;color:#c9c4b7}
+.consent input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--gold)}
+.pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:8px 14px;font-size:14px;font-weight:500}
+.pill.ok{background:#1f3a2a;color:#9fe0b2}.pill.warn{background:#3b3320;color:#f0cd7a}.pill.busy{background:#26251f;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.view{display:flex;flex-wrap:wrap;gap:16px;margin:16px 0}
+.pane{position:relative;flex:1 1 340px;height:min(62vh,560px);min-height:300px;background:#000;border-radius:12px;overflow:hidden;touch-action:none;cursor:grab;user-select:none}
+.pane:active{cursor:grabbing}
+.pane img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;display:block;-webkit-user-drag:none}
+.tag{position:absolute;top:10px;left:10px;z-index:2;background:rgba(20,19,15,.85);color:var(--text);font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;pointer-events:none}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px}
+.tools button{background:#26251f;color:var(--text);border:1px solid var(--line);border-radius:10px;min-width:44px;min-height:44px;padding:0 14px;font-size:16px}
+.tools .zl{font-size:14px;color:var(--muted);min-width:52px}
+.hint{font-size:13px;color:#a29d90;margin-left:auto}
+.rate button{border-radius:12px;padding:12px 20px;font-size:15px;font-weight:500;min-height:46px;border:1px solid}
+.r1{background:#1f3a2a;color:#9fe0b2;border-color:#2f5a42}.r2{background:#3b3320;color:#f0cd7a;border-color:#5d4f2c}.r3{background:#3d2422;color:#f2a39b;border-color:#62372f}
+input[type=text]{width:100%;background:var(--bg);color:var(--text);border:1px solid #4a463b;border-radius:10px;padding:12px 14px;font-size:15px;min-height:44px;font-family:inherit}
+label.s{display:block;font-size:13px;color:#a29d90;margin:14px 0 6px}
+.hidden{display:none!important}
+.err{color:#f2a39b;font-size:15px;margin-top:12px}
+@media (max-width:600px){h1{font-size:34px}.hint{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#e6b85c"/><path d="M8 22 C12 12 18 10 24 9" stroke="#14130f" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="10" cy="11" r="2.5" fill="#14130f"/></svg>
+    <span class="logo">flat2svg</span>
+  </header>
+  <h1>Flat illustrations<br>to clean SVG.</h1>
+  <p class="sub">Even fills, sharp edges, no gradients. We check your image first and tell you if it is a good fit.</p>
+
+  <section class="card">
+    <div id="drop" class="drop">
+      <p>Drop a PNG or JPG here</p>
+      <button class="btn" id="pick" type="button">Choose file</button>
+      <input id="file" type="file" accept="image/png,image/jpeg" class="hidden">
+      <p class="note" style="margin-top:14px">Up to 10 MB and 4000 px. Large images can take up to a minute.</p>
+    </div>
+    <div class="consent">
+      <input id="consent" type="checkbox" checked>
+      <label for="consent">Allow saving my image, the SVG and my rating to help improve the tool (stored privately, never shared or sold).</label>
+    </div>
+    <div id="error" class="err hidden" role="alert"></div>
+  </section>
+
+  <section id="result" class="card hidden" aria-live="polite">
+    <div class="row">
+      <span id="verdict" class="pill busy"></span>
+      <button id="force" class="btn ghost hidden" type="button">Convert anyway</button>
+    </div>
+    <p id="reason" class="note"></p>
+
+    <div id="viewer" class="hidden">
+      <div class="tools">
+        <button id="zout" type="button" aria-label="Zoom out">−</button>
+        <button id="zin" type="button" aria-label="Zoom in">+</button>
+        <button id="fit" type="button">Fit</button>
+        <button id="z100" type="button">100%</button>
+        <span id="zl" class="zl" aria-live="off">100%</span>
+        <span class="hint">Scroll to zoom · drag to move · double-click to reset</span>
+      </div>
+      <div class="view">
+        <div class="pane" id="p1"><span class="tag">Source</span><img id="im1" alt="Source image"></div>
+        <div class="pane" id="p2"><span class="tag">SVG</span><img id="im2" alt="Vectorized SVG result"></div>
+      </div>
+      <div class="row">
+        <a id="dl" class="btn" style="text-decoration:none;display:inline-flex;align-items:center" href="#">Download SVG</a>
+        <span id="info" class="note" style="margin:0"></span>
+      </div>
+      <div class="rate" style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line)">
+        <h2 style="margin:0 0 12px;font-size:16px;font-weight:600">How good is the result?</h2>
+        <div class="row">
+          <button class="r1" data-r="Excellent" type="button">Excellent</button>
+          <button class="r2" data-r="Acceptable" type="button">Acceptable</button>
+          <button class="r3" data-r="Error" type="button">Error</button>
+        </div>
+        <label class="s" for="comment">Comment (optional)</label>
+        <input id="comment" type="text" maxlength="500" placeholder="What went wrong or right?">
+        <p id="thanks" class="note" role="status"></p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var $ = function (s) { return document.querySelector(s); };
+  var sid = '';
+  try { sid = localStorage.getItem('f2s_sid') || ''; } catch (e) {}
+  if (!sid) {
+    sid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    try { localStorage.setItem('f2s_sid', sid); } catch (e) {}
+  }
+  var runId = null, busy = false;
+
+  function form(o) {
+    var f = new FormData();
+    for (var k in o) f.append(k, o[k]);
+    f.append('consent', $('#consent').checked ? '1' : '0');
+    f.append('session', sid);
+    return f;
+  }
+  function post(url, f) {
+    return fetch(url, { method: 'POST', body: f }).then(function (r) {
+      if (r.ok) return r.json();
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        throw new Error(j.detail || ('Error ' + r.status));
+      });
+    });
+  }
+  function showError(m) { var e = $('#error'); e.textContent = m || ''; e.classList.toggle('hidden', !m); }
+  function setVerdict(text, cls) { var v = $('#verdict'); v.textContent = text; v.className = 'pill ' + cls; }
+
+  // ---- upload -------------------------------------------------------------
+  function handleFile(file) {
+    if (!file || busy) return;
+    busy = true; showError('');
+    $('#result').classList.remove('hidden');
+    $('#viewer').classList.add('hidden'); $('#force').classList.add('hidden');
+    $('#reason').textContent = ''; $('#thanks').textContent = '';
+    setVerdict('Checking image…', 'busy');
+    post('/api/check', form({ file: file })).then(function (c) {
+      runId = c.run_id;
+      $('#reason').textContent = c.reason;
+      if (c.flat) {
+        setVerdict(c.message, 'ok');
+        return convert(false);
+      }
+      setVerdict(c.message, 'warn');
+      $('#force').classList.remove('hidden');
+      busy = false;
+    }).catch(function (e) {
+      busy = false; $('#result').classList.add('hidden'); showError(e.message);
+    });
+  }
+  function convert(forced) {
+    busy = true; $('#force').classList.add('hidden');
+    var prev = $('#verdict').textContent, cls = $('#verdict').className;
+    setVerdict('Vectorizing… this can take up to a minute', 'busy');
+    return post('/api/convert', form({ run_id: runId, forced: forced ? '1' : '0' })).then(function (r) {
+      setVerdict(forced ? 'Converted anyway - check the result carefully' : 'Flat illustration, converted', forced ? 'warn' : 'ok');
+      showResult(r);
+      busy = false;
+    }).catch(function (e) {
+      busy = false; $('#verdict').textContent = prev; $('#verdict').className = cls;
+      showError(e.message);
+    });
+  }
+  function showResult(r) {
+    V.w = r.width; V.h = r.height;
+    var a = $('#im1'), b = $('#im2'), t = Date.now(), loaded = 0;
+    function done() { if (++loaded === 2) { $('#viewer').classList.remove('hidden'); fit(); } }
+    [a, b].forEach(function (im) { im.style.width = V.w + 'px'; im.style.height = V.h + 'px'; im.onload = done; });
+    a.src = '/api/src/' + runId + '?t=' + t;
+    b.src = '/api/svg/' + runId + '?t=' + t;
+    $('#dl').href = '/api/svg/' + runId + '?download=1';
+    $('#info').textContent = r.info;
+  }
+
+  var drop = $('#drop'), fileInput = $('#file');
+  $('#pick').onclick = function () { fileInput.click(); };
+  fileInput.onchange = function () { handleFile(fileInput.files[0]); fileInput.value = ''; };
+  ['dragenter', 'dragover'].forEach(function (n) { drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+  ['dragleave', 'drop'].forEach(function (n) { drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
+  drop.addEventListener('drop', function (e) { handleFile(e.dataTransfer.files[0]); });
+  $('#force').onclick = function () { if (!busy) convert(true); };
+
+  // ---- synchronized zoom and pan --------------------------------------------
+  var V = { s: 1, tx: 0, ty: 0, w: 1, h: 1, fit: 1 };
+  var panes = [$('#p1'), $('#p2')], imgs = [$('#im1'), $('#im2')];
+  function apply() {
+    imgs.forEach(function (im) { im.style.transform = 'translate(' + V.tx + 'px,' + V.ty + 'px) scale(' + V.s + ')'; });
+    imgs[0].style.imageRendering = V.s > 1.5 ? 'pixelated' : 'auto';
+    $('#zl').textContent = Math.round(V.s * 100) + '%';
+  }
+  function fit() {
+    var r = panes[0].getBoundingClientRect();
+    V.fit = Math.min(r.width / V.w, r.height / V.h);
+    V.s = V.fit; V.tx = (r.width - V.w * V.s) / 2; V.ty = (r.height - V.h * V.s) / 2; apply();
+  }
+  function zoomAt(cx, cy, f) {
+    var s2 = Math.min(Math.max(V.s * f, V.fit * 0.5), 64), k = s2 / V.s;
+    V.tx = cx - (cx - V.tx) * k; V.ty = cy - (cy - V.ty) * k; V.s = s2; apply();
+  }
+  function zoomCenter(f) { var r = panes[0].getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, f); }
+  $('#zin').onclick = function () { zoomCenter(1.5); };
+  $('#zout').onclick = function () { zoomCenter(1 / 1.5); };
+  $('#fit').onclick = fit;
+  $('#z100').onclick = function () { var r = panes[0].getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, 1 / V.s); };
+  window.addEventListener('resize', function () { if (!$('#viewer').classList.contains('hidden')) fit(); });
+
+  panes.forEach(function (pane) {
+    var ptrs = new Map(), lastDist = 0;
+    pane.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var r = pane.getBoundingClientRect();
+      zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015));
+    }, { passive: false });
+    pane.addEventListener('pointerdown', function (e) {
+      pane.setPointerCapture(e.pointerId);
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); lastDist = 0;
+    });
+    pane.addEventListener('pointermove', function (e) {
+      var p = ptrs.get(e.pointerId);
+      if (!p) return;
+      if (ptrs.size === 1) {
+        V.tx += e.clientX - p.x; V.ty += e.clientY - p.y; apply();
+      } else if (ptrs.size === 2) {
+        p.x = e.clientX; p.y = e.clientY;
+        var pts = Array.from(ptrs.values()), d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        var r = pane.getBoundingClientRect();
+        if (lastDist) zoomAt((pts[0].x + pts[1].x) / 2 - r.left, (pts[0].y + pts[1].y) / 2 - r.top, d / lastDist);
+        lastDist = d;
+      }
+      p.x = e.clientX; p.y = e.clientY;
+    });
+    function up(e) { ptrs.delete(e.pointerId); lastDist = 0; }
+    pane.addEventListener('pointerup', up);
+    pane.addEventListener('pointercancel', up);
+    pane.addEventListener('dblclick', fit);
+  });
+
+  // ---- rating -----------------------------------------------------------------
+  document.querySelectorAll('.rate button').forEach(function (b) {
+    b.onclick = function () {
+      if (!runId) return;
+      post('/api/rate', form({ run_id: runId, rating: b.dataset.r, comment: $('#comment').value }))
+        .then(function (r) { $('#thanks').textContent = r.message; })
+        .catch(function (e) { $('#thanks').textContent = e.message; });
+    };
+  });
+})();
+</script>
+</body>
+</html>
