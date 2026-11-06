@@ -34,6 +34,8 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+os.environ["GRADIO_SSR_MODE"] = "False"   # SSR would start its own server on port 7860 and block uvicorn
+
 import gradio as gr
 import spaces
 import uvicorn
