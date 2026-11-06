@@ -12,7 +12,14 @@
 body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif}
 button{font-family:inherit;cursor:pointer}
 button:focus-visible,input:focus-visible,label:focus-within{outline:2px solid var(--gold);outline-offset:2px}
-.wrap{max-width:1180px;margin:0 auto;padding:0 24px 56px}
+.wrap{padding:0 24px 56px}
+.narrow{max-width:1180px;margin:0 auto}
+.wait{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--muted);font-size:15px;text-align:center;padding:20px;background:linear-gradient(100deg,#0c0b09 30%,#1c1a14 50%,#0c0b09 70%);background-size:250% 100%;animation:shimmer 1.6s linear infinite}
+.wait.idle{animation:none;background:#0c0b09}
+.wait .spin{width:30px;height:30px;border:3px solid #3a372d;border-top-color:var(--gold);border-radius:50%;animation:spin .9s linear infinite}
+.wait.idle .spin{display:none}
+@keyframes shimmer{from{background-position:150% 0}to{background-position:-100% 0}}
+@keyframes spin{to{transform:rotate(360deg)}}
 header{display:flex;align-items:center;gap:12px;padding:28px 0}
 .logo{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;letter-spacing:-.01em}
 h1{margin:12px 0 10px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:48px;line-height:1.06;letter-spacing:-.02em}
@@ -31,7 +38,7 @@ h1{margin:12px 0 10px;font-family:'Space Grotesk',sans-serif;font-weight:700;fon
 .pill.ok{background:#1f3a2a;color:#9fe0b2}.pill.warn{background:#3b3320;color:#f0cd7a}.pill.busy{background:#26251f;color:var(--muted)}
 .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
 .view{display:flex;flex-wrap:wrap;gap:16px;margin:16px 0}
-.pane{position:relative;flex:1 1 340px;height:min(62vh,560px);min-height:300px;background:#000;border-radius:12px;overflow:hidden;touch-action:none;cursor:grab;user-select:none}
+.pane{position:relative;flex:1 1 420px;height:calc(100vh - 190px);min-height:420px;background:#000;border-radius:12px;overflow:hidden;touch-action:none;cursor:grab;user-select:none}
 .pane:active{cursor:grabbing}
 .pane img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;display:block;-webkit-user-drag:none}
 .tag{position:absolute;top:10px;left:10px;z-index:2;background:rgba(20,19,15,.85);color:var(--text);font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;pointer-events:none}
@@ -50,6 +57,7 @@ label.s{display:block;font-size:13px;color:#a29d90;margin:14px 0 6px}
 </head>
 <body>
 <div class="wrap">
+  <div class="narrow">
   <header>
     <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#e6b85c"/><path d="M8 22 C12 12 18 10 24 9" stroke="#14130f" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="10" cy="11" r="2.5" fill="#14130f"/></svg>
     <span class="logo">flat2svg</span>
@@ -70,6 +78,7 @@ label.s{display:block;font-size:13px;color:#a29d90;margin:14px 0 6px}
     </div>
     <div id="error" class="err hidden" role="alert"></div>
   </section>
+  </div>
 
   <section id="result" class="card hidden" aria-live="polite">
     <div class="row">
@@ -89,7 +98,7 @@ label.s{display:block;font-size:13px;color:#a29d90;margin:14px 0 6px}
       </div>
       <div class="view">
         <div class="pane" id="p1"><span class="tag">Source</span><img id="im1" alt="Source image"></div>
-        <div class="pane" id="p2"><span class="tag">SVG</span><img id="im2" alt="Vectorized SVG result"></div>
+        <div class="pane" id="p2"><span class="tag">SVG</span><img id="im2" alt="Vectorized SVG result" style="visibility:hidden"><div class="wait" id="wait"><div class="spin"></div><span id="waitText"></span></div></div>
       </div>
       <div class="row">
         <a id="dl" class="btn" style="text-decoration:none;display:inline-flex;align-items:center" href="#">Download SVG</a>
@@ -145,43 +154,72 @@ label.s{display:block;font-size:13px;color:#a29d90;margin:14px 0 6px}
     busy = true; showError('');
     $('#result').classList.remove('hidden');
     $('#viewer').classList.add('hidden'); $('#force').classList.add('hidden');
-    $('#reason').textContent = ''; $('#thanks').textContent = '';
+    $('#reason').textContent = ''; $('#thanks').textContent = ''; $('#info').textContent = '';
+    $('#dl').classList.add('hidden');
+    resetSvgPane();
     setVerdict('Checking image…', 'busy');
     post('/api/check', form({ file: file })).then(function (c) {
       runId = c.run_id;
       $('#reason').textContent = c.reason;
+      showSource(c);
       if (c.flat) {
         setVerdict(c.message, 'ok');
         return convert(false);
       }
       setVerdict(c.message, 'warn');
+      waitState('Not converted yet. Use “Convert anyway” above if you still want an SVG.', false);
       $('#force').classList.remove('hidden');
       busy = false;
     }).catch(function (e) {
-      busy = false; $('#result').classList.add('hidden'); showError(e.message);
+      busy = false; stopTimer(); $('#result').classList.add('hidden'); showError(e.message);
     });
   }
+  // source image is shown (and can be zoomed) while the SVG is still being made
+  function showSource(c) {
+    V.w = c.width; V.h = c.height;
+    var a = $('#im1'), b = $('#im2');
+    [a, b].forEach(function (im) { im.style.width = V.w + 'px'; im.style.height = V.h + 'px'; });
+    a.onload = function () { $('#viewer').classList.remove('hidden'); fit(); };
+    a.src = '/api/src/' + runId + '?t=' + Date.now();
+  }
+  function resetSvgPane() { var b = $('#im2'); b.style.visibility = 'hidden'; b.removeAttribute('src'); waitState('', false); }
+  function waitState(text, spinning) {
+    var w = $('#wait'); w.classList.remove('hidden'); w.classList.toggle('idle', !spinning);
+    $('#waitText').textContent = text;
+  }
+  var timer = null;
+  function startTimer() {
+    var t0 = Date.now(); stopTimer();
+    function tick() {
+      var s = Math.floor((Date.now() - t0) / 1000);
+      waitState('Vectorizing… ' + s + ' s\nYou can zoom into the source meanwhile.', true);
+      $('#waitText').style.whiteSpace = 'pre-line';
+    }
+    tick(); timer = setInterval(tick, 500);
+  }
+  function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
   function convert(forced) {
     busy = true; $('#force').classList.add('hidden');
     var prev = $('#verdict').textContent, cls = $('#verdict').className;
-    setVerdict('Vectorizing… this can take up to a minute', 'busy');
+    setVerdict('Vectorizing…', 'busy');
+    startTimer();
     return post('/api/convert', form({ run_id: runId, forced: forced ? '1' : '0' })).then(function (r) {
+      stopTimer();
       setVerdict(forced ? 'Converted anyway - check the result carefully' : 'Flat illustration, converted', forced ? 'warn' : 'ok');
       showResult(r);
       busy = false;
     }).catch(function (e) {
+      stopTimer(); waitState('Conversion failed.', false);
       busy = false; $('#verdict').textContent = prev; $('#verdict').className = cls;
       showError(e.message);
     });
   }
   function showResult(r) {
-    V.w = r.width; V.h = r.height;
-    var a = $('#im1'), b = $('#im2'), t = Date.now(), loaded = 0;
-    function done() { if (++loaded === 2) { $('#viewer').classList.remove('hidden'); fit(); } }
-    [a, b].forEach(function (im) { im.style.width = V.w + 'px'; im.style.height = V.h + 'px'; im.onload = done; });
-    a.src = '/api/src/' + runId + '?t=' + t;
-    b.src = '/api/svg/' + runId + '?t=' + t;
+    var b = $('#im2');
+    b.onload = function () { b.style.visibility = 'visible'; $('#wait').classList.add('hidden'); apply(); };
+    b.src = '/api/svg/' + runId + '?t=' + Date.now();
     $('#dl').href = '/api/svg/' + runId + '?download=1';
+    $('#dl').classList.remove('hidden');
     $('#info').textContent = r.info;
   }
 
