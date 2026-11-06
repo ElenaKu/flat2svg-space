@@ -6,6 +6,7 @@ from a private Hugging Face repo (CORE_REPO) using the HF_TOKEN secret, so visit
 see this thin web layer.
 
 Flow:
+  0. Engine: core v2 by default (falls back to main flat2svg); open the page with ?engine=main to compare.
   1. The page uploads a PNG/JPG to /api/check; the flatness detector says whether it fits flat2svg.
   2. Flat images are converted at once (/api/convert); others get a warning and a
      "Convert anyway" button.
@@ -59,6 +60,14 @@ import flat2svg as f2s  # noqa: E402
 import flatness_detector as fd  # noqa: E402
 
 OPTIONS = {**f2s.DEFAULTS, "jobs": 1}
+
+# core v2 engine (folder core2/ in the private core repo); main flat2svg stays as the fallback
+try:
+    from core2 import pipeline as core2_pipeline  # noqa: E402
+except Exception as exc:  # missing files or import error: keep serving the main engine
+    core2_pipeline = None
+    print("core2 not available, using main engine only:", exc)
+DEFAULT_ENGINE = "core2" if core2_pipeline else "main"
 
 
 @spaces.GPU(duration=1)
@@ -166,7 +175,8 @@ def index():
 
 
 @router.post("/api/check")
-def api_check(file: UploadFile = File(...), consent: str = Form("0"), session: str = Form("")):
+def api_check(file: UploadFile = File(...), consent: str = Form("0"), session: str = Form(""),
+              engine: str = Form("")):
     data = file.file.read(MAX_MB * 1024 * 1024 + 1)
     if len(data) > MAX_MB * 1024 * 1024:
         raise HTTPException(413, f"File is larger than {MAX_MB} MB.")
@@ -186,12 +196,15 @@ def api_check(file: UploadFile = File(...), consent: str = Form("0"), session: s
         path.unlink(missing_ok=True)
         raise HTTPException(413, f"Image is larger than {MAX_SIDE} px on the long side.")
     report = asdict(rep)
+    engine = engine if engine in ("core2", "main") else DEFAULT_ENGINE
+    if engine == "core2" and core2_pipeline is None:
+        engine = "main"
     put_run(run_id, {"path": str(path), "name": Path(file.filename or "image").stem, "report": report,
-                     "svg": None, "info": ""})
-    log_usage("upload", session, run_id=run_id, verdict=rep.verdict, width=rep.width, height=rep.height,
+                     "svg": None, "info": "", "engine": engine})
+    log_usage("upload", session, run_id=run_id, engine=engine, verdict=rep.verdict, width=rep.width, height=rep.height,
               consent=consent == "1")
     if consent == "1":
-        save_record(run_id, str(path), None, report, {"converted": False, "session": session})
+        save_record(run_id, str(path), None, report, {"converted": False, "session": session, "engine": engine})
     return {"run_id": run_id, "flat": rep.verdict == "flat", "verdict": rep.verdict,
             "message": VERDICT_TEXT.get(rep.verdict, rep.verdict), "reason": rep.reason,
             "width": rep.width, "height": rep.height}
@@ -202,18 +215,24 @@ def api_convert(run_id: str = Form(...), forced: str = Form("0"), consent: str =
                 session: str = Form("")):
     run = get_run(run_id)
     t0 = time.time()
+    engine = run.get("engine", "main")
     with WORK_LOCK:
         rgb, alpha = f2s.load_image(Path(run["path"]))
-        with tempfile.TemporaryDirectory() as work:
-            res = f2s.adaptive_convert(rgb, alpha, OPTIONS, Path(work))
-    svg = res["svg"]
-    info = f"{len(res['used'])} colors · {len(svg.encode('utf-8')) / 1024:.0f} KB · {time.time() - t0:.1f} s"
+        if engine == "core2":
+            svg, st, _ = core2_pipeline.vectorize(rgb)
+            n_colors = st.get("colours", "?")
+        else:
+            with tempfile.TemporaryDirectory() as work:
+                res = f2s.adaptive_convert(rgb, alpha, OPTIONS, Path(work))
+            svg, n_colors = res["svg"], len(res["used"])
+    info = f"{n_colors} colors · {len(svg.encode('utf-8')) / 1024:.0f} KB · {time.time() - t0:.1f} s"
     run["svg"], run["info"] = svg, info
-    log_usage("force" if forced == "1" else "convert", session, run_id=run_id,
+    log_usage("force" if forced == "1" else "convert", session, run_id=run_id, engine=engine,
               verdict=run["report"].get("verdict"), info=info, consent=consent == "1")
     if consent == "1":
         save_record(run_id, run["path"], svg, run["report"],
-                    {"converted": True, "forced": forced == "1", "info": info, "session": session})
+                    {"converted": True, "forced": forced == "1", "info": info, "session": session,
+                     "engine": engine})
     return {"run_id": run_id, "info": info, "width": run["report"]["width"], "height": run["report"]["height"]}
 
 
@@ -240,11 +259,12 @@ def api_rate(run_id: str = Form(...), rating: str = Form(...), comment: str = Fo
     if rating not in ("Excellent", "Acceptable", "Error"):
         raise HTTPException(400, "Unknown rating.")
     run = get_run(run_id)
-    log_usage("rate", session, run_id=run_id, rating=rating, verdict=run["report"].get("verdict"),
+    log_usage("rate", session, run_id=run_id, engine=run.get("engine"), rating=rating, verdict=run["report"].get("verdict"),
               consent=consent == "1")
     if consent == "1":
         save_record(run_id, None, None, run["report"],
-                    {"rating": rating, "comment": comment[:1000], "session": session})
+                    {"rating": rating, "comment": comment[:1000], "session": session,
+                     "engine": run.get("engine")})
         return {"message": f"Thank you! Your rating: {rating}."}
     return {"message": "Thank you! (Ratings are only saved when the checkbox is on.)"}
 

@@ -135,6 +135,7 @@ label.s{display:block;font-size:13px;color:#a29d90;margin:14px 0 6px}
     for (var k in o) f.append(k, o[k]);
     f.append('consent', $('#consent').checked ? '1' : '0');
     f.append('session', sid);
+    var en = new URLSearchParams(location.search).get('engine'); if (en) f.append('engine', en);
     return f;
   }
   function post(url, f) {
