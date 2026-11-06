@@ -10,5 +10,4 @@ scikit-image
 scipy
 Pillow
 fastapi
-uvicorn
 python-multipart

@@ -38,8 +38,7 @@ os.environ["GRADIO_SSR_MODE"] = "False"   # SSR would start its own server on po
 
 import gradio as gr
 import spaces
-import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from huggingface_hub import CommitScheduler, snapshot_download
 
@@ -149,7 +148,7 @@ def put_run(run_id, run):
 # ---------------------------------------------------------------------------
 # API
 # ---------------------------------------------------------------------------
-app = FastAPI()
+router = APIRouter()
 
 VERDICT_TEXT = {
     "flat": "Flat illustration, suitable for flat2svg.",
@@ -161,12 +160,12 @@ VERDICT_TEXT = {
 }
 
 
-@app.get("/")
+@router.get("/")
 def index():
     return FileResponse(HERE / "static" / "index.html")
 
 
-@app.post("/api/check")
+@router.post("/api/check")
 def api_check(file: UploadFile = File(...), consent: str = Form("0"), session: str = Form("")):
     data = file.file.read(MAX_MB * 1024 * 1024 + 1)
     if len(data) > MAX_MB * 1024 * 1024:
@@ -198,7 +197,7 @@ def api_check(file: UploadFile = File(...), consent: str = Form("0"), session: s
             "width": rep.width, "height": rep.height}
 
 
-@app.post("/api/convert")
+@router.post("/api/convert")
 def api_convert(run_id: str = Form(...), forced: str = Form("0"), consent: str = Form("0"),
                 session: str = Form("")):
     run = get_run(run_id)
@@ -218,13 +217,13 @@ def api_convert(run_id: str = Form(...), forced: str = Form("0"), consent: str =
     return {"run_id": run_id, "info": info, "width": run["report"]["width"], "height": run["report"]["height"]}
 
 
-@app.get("/api/src/{run_id}")
+@router.get("/api/src/{run_id}")
 def api_src(run_id: str):
     run = get_run(run_id)
     return FileResponse(run["path"], headers={"Cache-Control": "no-store"})
 
 
-@app.get("/api/svg/{run_id}")
+@router.get("/api/svg/{run_id}")
 def api_svg(run_id: str, download: int = 0):
     run = get_run(run_id)
     if not run["svg"]:
@@ -235,7 +234,7 @@ def api_svg(run_id: str, download: int = 0):
     return Response(run["svg"], media_type="image/svg+xml", headers=headers)
 
 
-@app.post("/api/rate")
+@router.post("/api/rate")
 def api_rate(run_id: str = Form(...), rating: str = Form(...), comment: str = Form(""),
              consent: str = Form("0"), session: str = Form("")):
     if rating not in ("Excellent", "Acceptable", "Error"):
@@ -251,12 +250,17 @@ def api_rate(run_id: str = Form(...), rating: str = Form(...), comment: str = Fo
 
 
 # ---------------------------------------------------------------------------
-# A tiny Gradio app is mounted so that ZeroGPU hardware sees a normal Gradio Space;
-# visitors only ever use the custom page at "/".
+# ZeroGPU only accepts a Space that is started through Gradio's own launch(), so a tiny
+# Gradio app is launched normally and our routes are put in front of Gradio's routes:
+# visitors only ever see the custom page at "/".
 # ---------------------------------------------------------------------------
-with gr.Blocks() as _stub:
+with gr.Blocks() as demo:
     gr.Markdown("flat2svg")
-app = gr.mount_gradio_app(app, _stub, path="/gradio")
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=7860)
+demo.launch(server_name="0.0.0.0", server_port=7860, prevent_thread_lock=True)
+gradio_app = demo.app
+_before = list(gradio_app.router.routes)
+gradio_app.include_router(router)
+_mine = gradio_app.router.routes[len(_before):]
+gradio_app.router.routes[:] = _mine + _before      # our "/" and "/api/..." win over Gradio's
+demo.block_thread()
